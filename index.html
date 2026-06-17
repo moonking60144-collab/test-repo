@@ -3,7 +3,8 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Web QR 掃描測試 - BarcodeDetector</title>
+  <title>Web QR 掃描測試 - ZXing</title>
+  <script src="https://unpkg.com/@zxing/browser@latest"></script>
   <style>
     body {
       margin: 0;
@@ -11,11 +12,6 @@
       font-family: system-ui, -apple-system, BlinkMacSystemFont, "Noto Sans TC", sans-serif;
       background: #111827;
       color: #f9fafb;
-    }
-
-    h1 {
-      font-size: 20px;
-      margin: 0 0 12px;
     }
 
     .wrap {
@@ -27,10 +23,6 @@
       width: 100%;
       background: #000;
       border-radius: 12px;
-    }
-
-    canvas {
-      display: none;
     }
 
     button {
@@ -67,10 +59,9 @@
 </head>
 <body>
   <div class="wrap">
-    <h1>Web QR 掃描測試：BarcodeDetector</h1>
+    <h1>Web QR 掃描測試：ZXing</h1>
 
     <video id="video" playsinline muted></video>
-    <canvas id="canvas"></canvas>
 
     <button id="startBtn">開始掃描</button>
     <button id="stopBtn">停止掃描</button>
@@ -88,110 +79,66 @@
 
 <script>
 const video = document.getElementById("video");
-const canvas = document.getElementById("canvas");
-const ctx = canvas.getContext("2d", { willReadFrequently: true });
 const resultEl = document.getElementById("result");
 const statusEl = document.getElementById("status");
 
-let stream = null;
-let scanning = false;
-let detector = null;
+let codeReader = null;
+let controls = null;
 
 function log(msg) {
   const now = new Date().toLocaleTimeString();
   statusEl.textContent = `[${now}] ${msg}\n` + statusEl.textContent;
 }
 
-async function startCamera() {
-  stream = await navigator.mediaDevices.getUserMedia({
-    video: {
-      facingMode: { ideal: "environment" },
-      width: { ideal: 1920 },
-      height: { ideal: 1080 }
-    },
-    audio: false
-  });
-
-  video.srcObject = stream;
-  await video.play();
-
-  await new Promise(resolve => {
-    if (video.readyState >= 2) resolve();
-    else video.onloadedmetadata = resolve;
-  });
-
-  const track = stream.getVideoTracks()[0];
-  log("track settings: " + JSON.stringify(track.getSettings()));
-  log(`video size: ${video.videoWidth}x${video.videoHeight}`);
-}
-
 async function startScan() {
-  if (scanning) return;
-
-  if (!("BarcodeDetector" in window)) {
-    resultEl.textContent = "此瀏覽器不支援 BarcodeDetector，請用 Android Chrome 測，或改測 ZXing 版。";
-    resultEl.className = "bad";
-    log("BarcodeDetector not supported");
-    return;
-  }
-
-  const formats = await BarcodeDetector.getSupportedFormats();
-  log("supported formats: " + formats.join(", "));
-
-  if (!formats.includes("qr_code")) {
-    resultEl.textContent = "此瀏覽器 BarcodeDetector 不支援 qr_code";
-    resultEl.className = "bad";
-    return;
-  }
-
-  detector = new BarcodeDetector({ formats: ["qr_code"] });
-
   try {
-    await startCamera();
-    scanning = true;
-    resultEl.textContent = "掃描中...";
+    resultEl.textContent = "啟動中...";
     resultEl.className = "warn";
-    scanLoop();
+
+    codeReader = new ZXingBrowser.BrowserQRCodeReader();
+
+    controls = await codeReader.decodeFromConstraints(
+      {
+        video: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        },
+        audio: false
+      },
+      video,
+      (result, error, controls) => {
+        const track = video.srcObject?.getVideoTracks?.()[0];
+        if (track) {
+          const s = track.getSettings();
+          if (!window.__loggedSettings) {
+            window.__loggedSettings = true;
+            log("track settings: " + JSON.stringify(s));
+            log(`video size: ${video.videoWidth}x${video.videoHeight}`);
+          }
+        }
+
+        if (result) {
+          resultEl.textContent = result.getText();
+          resultEl.className = "ok";
+          log("掃到：" + result.getText());
+        }
+      }
+    );
+
+    log("ZXing started");
   } catch (err) {
-    resultEl.textContent = "啟動相機失敗：" + err;
+    resultEl.textContent = "啟動失敗：" + err;
     resultEl.className = "bad";
-    log("camera error: " + err);
+    log("error: " + err);
   }
 }
 
-async function scanLoop() {
-  if (!scanning) return;
-
-  const t0 = performance.now();
-
-  try {
-    const codes = await detector.detect(video);
-    const cost = Math.round(performance.now() - t0);
-
-    if (codes.length > 0) {
-      const text = codes[0].rawValue;
-      resultEl.textContent = text;
-      resultEl.className = "ok";
-      log(`掃到 ${codes.length} 個，耗時 ${cost}ms：${text}`);
-    } else {
-      log(`未掃到，耗時 ${cost}ms`);
-    }
-  } catch (err) {
-    log("detect error: " + err);
+function stopScan() {
+  if (controls) {
+    controls.stop();
+    controls = null;
   }
-
-  setTimeout(scanLoop, 250);
-}
-
-async function stopScan() {
-  scanning = false;
-
-  if (stream) {
-    stream.getTracks().forEach(t => t.stop());
-    stream = null;
-  }
-
-  video.srcObject = null;
   log("已停止");
 }
 
