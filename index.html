@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>HTML5 QRCode 手機測試</title>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html5-qrcode/2.3.8/html5-qrcode.min.js"></script>
+
+  <style>
+    body {
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Noto Sans TC", sans-serif;
+      margin: 0;
+      padding: 16px;
+      background: #111827;
+      color: #f9fafb;
+    }
+
+    h1 {
+      font-size: 20px;
+      margin: 0 0 12px;
+    }
+
+    #reader {
+      width: 100%;
+      max-width: 520px;
+      margin: 0 auto;
+      background: #000;
+      border-radius: 12px;
+      overflow: hidden;
+    }
+
+    .panel {
+      max-width: 520px;
+      margin: 12px auto 0;
+      padding: 12px;
+      background: #1f2937;
+      border-radius: 12px;
+      word-break: break-all;
+    }
+
+    button {
+      width: 100%;
+      padding: 14px;
+      margin-top: 8px;
+      font-size: 18px;
+      border: 0;
+      border-radius: 10px;
+      background: #2563eb;
+      color: white;
+      font-weight: 700;
+    }
+
+    .ok { color: #86efac; }
+    .warn { color: #facc15; }
+    .bad { color: #fca5a5; }
+
+    pre {
+      white-space: pre-wrap;
+      font-size: 13px;
+      color: #d1d5db;
+    }
+  </style>
+</head>
+<body>
+  <h1>QRCode Web 掃描測試</h1>
+
+  <div id="reader"></div>
+
+  <div class="panel">
+    <button id="startBtn">開始掃描</button>
+    <button id="stopBtn">停止掃描</button>
+  </div>
+
+  <div class="panel">
+    <div>掃描結果：</div>
+    <div id="result" class="ok">尚未掃描</div>
+  </div>
+
+  <div class="panel">
+    <div>狀態：</div>
+    <pre id="status">等待開始</pre>
+  </div>
+
+  <script>
+    const resultEl = document.getElementById("result");
+    const statusEl = document.getElementById("status");
+    const startBtn = document.getElementById("startBtn");
+    const stopBtn = document.getElementById("stopBtn");
+
+    let html5QrCode = null;
+    let isRunning = false;
+
+    function logStatus(msg) {
+      const now = new Date().toLocaleTimeString();
+      statusEl.textContent = `[${now}] ${msg}\n` + statusEl.textContent;
+    }
+
+    async function startScan() {
+      if (isRunning) return;
+
+      resultEl.textContent = "啟動相機中...";
+      resultEl.className = "warn";
+
+      html5QrCode = new Html5Qrcode("reader", {
+        verbose: false
+      });
+
+      const config = {
+        fps: 10,
+        qrbox: function(viewfinderWidth, viewfinderHeight) {
+          const minEdge = Math.min(viewfinderWidth, viewfinderHeight);
+          const size = Math.floor(minEdge * 0.75);
+          return { width: size, height: size };
+        },
+        aspectRatio: 1.7777778,
+        disableFlip: true,
+        formatsToSupport: [ Html5QrcodeSupportedFormats.QR_CODE ],
+        videoConstraints: {
+          facingMode: { ideal: "environment" },
+          width: { ideal: 1920 },
+          height: { ideal: 1080 }
+        }
+      };
+
+      try {
+        await html5QrCode.start(
+          { facingMode: "environment" },
+          config,
+          decodedText => {
+            resultEl.textContent = decodedText;
+            resultEl.className = "ok";
+            logStatus("掃到：" + decodedText);
+
+            // 如果只想測第一次掃到就停，取消下面註解
+            // stopScan();
+          },
+          errorMessage => {
+            // 每幀掃不到都會進來，正常，不要一直 alert
+          }
+        );
+
+        isRunning = true;
+        logStatus("相機已啟動。請用 Safari/Chrome 測，不要用 LINE 內建瀏覽器。");
+
+        // 額外列出 video 實際解析度，方便判斷是不是只有 640x480
+        setTimeout(() => {
+          const video = document.querySelector("#reader video");
+          if (video) {
+            logStatus(`video 實際尺寸：${video.videoWidth}x${video.videoHeight}`);
+          } else {
+            logStatus("找不到 video element");
+          }
+        }, 1200);
+
+      } catch (err) {
+        resultEl.textContent = "啟動失敗：" + err;
+        resultEl.className = "bad";
+        logStatus("啟動失敗：" + err);
+      }
+    }
+
+    async function stopScan() {
+      if (!html5QrCode || !isRunning) return;
+
+      try {
+        await html5QrCode.stop();
+        await html5QrCode.clear();
+        isRunning = false;
+        logStatus("已停止掃描");
+      } catch (err) {
+        logStatus("停止失敗：" + err);
+      }
+    }
+
+    startBtn.addEventListener("click", startScan);
+    stopBtn.addEventListener("click", stopScan);
+  </script>
+</body>
+</html>
