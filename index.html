@@ -37,6 +37,8 @@
       background: #2563eb;
     }
 
+    button:disabled { opacity: .55; }
+
     .panel {
       margin-top: 10px;
       padding: 12px;
@@ -64,7 +66,7 @@
     <video id="video" playsinline muted></video>
 
     <button id="startBtn">開始掃描</button>
-    <button id="stopBtn">停止掃描</button>
+    <button id="stopBtn" disabled>停止掃描</button>
 
     <div class="panel">
       <div>掃描結果：</div>
@@ -81,6 +83,8 @@
 const video = document.getElementById("video");
 const resultEl = document.getElementById("result");
 const statusEl = document.getElementById("status");
+const startBtn = document.getElementById("startBtn");
+const stopBtn = document.getElementById("stopBtn");
 
 let codeReader = null;
 let controls = null;
@@ -91,6 +95,7 @@ function log(msg) {
 }
 
 async function startScan() {
+  startBtn.disabled = true;
   try {
     resultEl.textContent = "啟動中...";
     resultEl.className = "warn";
@@ -126,8 +131,10 @@ async function startScan() {
       }
     );
 
+    stopBtn.disabled = false;
     log("ZXing started");
   } catch (err) {
+    startBtn.disabled = false;
     resultEl.textContent = "啟動失敗：" + err;
     resultEl.className = "bad";
     log("error: " + err);
@@ -138,12 +145,14 @@ function stopScan() {
   if (controls) {
     controls.stop();
     controls = null;
+    stopBtn.disabled = true;
+    startBtn.disabled = false;
   }
   log("已停止");
 }
 
-document.getElementById("startBtn").addEventListener("click", startScan);
-document.getElementById("stopBtn").addEventListener("click", stopScan);
+startBtn.addEventListener("click", startScan);
+stopBtn.addEventListener("click", stopScan);
 </script>
 </body>
 </html>
